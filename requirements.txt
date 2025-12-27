@@ -1,0 +1,10 @@
+
+torch
+numpy
+pandas
+datasets       # for MS MARCO / SciFact datasets
+sentence-transformers
+faiss-cpu
+rank_bm25      # for BM25 baseline
+fastapi
+uvicorn

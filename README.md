@@ -31,5 +31,10 @@ Standard Vector Search (RAG) often suffers from a "precision" problem: it retrie
 </div>
 <br>
 
+### "  LLMs can reason over BM25 scores to Improve Listwise Reranking "
+
+https://arxiv.org/pdf/2506.14086
+
+
 
 

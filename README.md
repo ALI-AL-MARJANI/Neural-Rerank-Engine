@@ -25,15 +25,11 @@ Standard Vector Search (RAG) often suffers from a "precision" problem: it retrie
 
 ## Architecture
 
-```mermaid
-graph LR
-    A[User Query] --> B{Hybrid Retriever}
-    B -->|Keywords| C[BM25 Sparse Index]
-    B -->|Semantics| D[FAISS Dense Index]
-    C --> E[Top-50 Candidates]
-    D --> E
-    E --> F[Cross-Encoder Reranker]
-    F --> G[Sorted Top-3 Results]
+
+<div align="center">
+  <img src="assets/archi.png" alt="Architecture" width="100%" style="border-radius: 10px; border: 1px solid #e1e4e8;">
+</div>
+<br>
 
 
 

@@ -1,6 +1,5 @@
 # Neural Rerank Engine
 
-![Python](https://img.shields.io/badge/Pythonblue?style=for-the-badge&logo=python)
 ![PyTorch](https://img.shields.io/badge/PyTorch-Deep%20Learning-orange?style=for-the-badge&logo=pytorch)
 ![HuggingFace](https://img.shields.io/badge/HuggingFace-Transformers-yellow?style=for-the-badge&logo=huggingface)
 ![FAISS](https://img.shields.io/badge/FAISS-Vector%20Search-green?style=for-the-badge)
@@ -35,5 +34,6 @@ graph LR
     D --> E
     E --> F[Cross-Encoder Reranker]
     F --> G[Sorted Top-3 Results]
+
 
 

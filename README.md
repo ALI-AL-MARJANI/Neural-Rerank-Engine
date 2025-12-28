@@ -36,5 +36,30 @@ Standard Vector Search (RAG) often suffers from a "precision" problem: it retrie
 https://arxiv.org/pdf/2506.14086
 
 
+## Live Demo: 
+
+Here is a real execution showing why the **Two-Stage Architecture** is necessary.
+
+**User Query:** *"what is the function of mitochondria?"*
+
+### Stage 1: Hybrid Search (Before Reranking)
+*High Recall , Low Precision*
+The retriever finds documents containing keywords like "function" or "cell", but lacks deep understanding.
+> 1. "The main function of mitochondria is..." (Relevant)
+> 2. "Function **The Golgi complex** takes proteins..." (**Irrelevant**)
+> 3. "The **cytoplasm** is the cytosol... Its main function..." (**Irrelevant** - Wrong part of cell)
+
+### Stage 2: Cross-Encoder (After BERT)
+*High Precision.*
+The BERT model reads the pairs and understands that we specifically asked about *mitochondria*, filtering out the Golgi complex and Cytoplasm.
+
+> 1. **[Score: 9.59]** "The main function of mitochondria is the production of energy..."
+> 2. **[Score: 8.15]** "Mitochondria ... are organelles that carry out cellular respiration..."
+> 3. **[Score: 7.92]** "An organelle found in large numbers... The main function of the mitochondria is..."
+
+**Result:** The Reranker successfully eliminated noise and surfaced the most scientifically accurate definitions.
+
+
+
 
 

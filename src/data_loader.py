@@ -7,9 +7,6 @@ def load_msmarco_subset(output_path="data/raw/corpus.json", max_samples=10000):
     Downloads a subset of the MS MARCO dataset (Passage Ranking).
     Uses 'streaming' mode to avoid downloading the full 50GB dataset.
     
-    Args:
-        output_path (str): Path to save the JSON file.
-        max_samples (int): Number of passages to retrieve.
     """
     
     
@@ -22,7 +19,7 @@ def load_msmarco_subset(output_path="data/raw/corpus.json", max_samples=10000):
     
     data = []
     
-    # Retrieve only the first N examples
+    # We retrieve only the first N examples
     for i, row in enumerate(dataset):
         if i >= max_samples:
             break
@@ -32,7 +29,7 @@ def load_msmarco_subset(output_path="data/raw/corpus.json", max_samples=10000):
         # We take the first available passage for simplicity
         try:
             text = row['passages']['passage_text'][0]
-            doc_id = row['query_id'] # Use query_id as a temporary doc_id
+            doc_id = row['query_id'] 
             
             data.append({
                 "id": str(doc_id),

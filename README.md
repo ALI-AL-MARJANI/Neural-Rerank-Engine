@@ -41,15 +41,17 @@ We evaluated the system on a subset of the MS MARCO dataset. The results demonst
 | **Hybrid + Rerank** | **0.8282** | ~165 ms |
 
 ---
+
 ## Future Work & State of the Art
 
 While this project implements the current industry standard (Bi-Encoder + Cross-Encoder), research in Neural Information Retrieval is moving fast.
 
-**Research Insight (2025): Listwise Reranking with LLMs**
+**Research Insight (2025): Listwise Reranking with LLMs** :
 
 A promising direction to reduce the computational cost of Cross-Encoders is explored in the paper "LLMs can reason over BM25 scores to Improve Listwise Reranking" (https://arxiv.org/pdf/2506.14086).
 
 The paper suggests that instead of feeding full document text to a heavy model, we can feed retrieval scores and metadata to a lightweight LLM. The LLM can "reason" about the distribution of scores to re-rank documents efficiently.
+
 
 
 

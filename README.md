@@ -31,33 +31,25 @@ Standard Vector Search (RAG) often suffers from a "precision" problem: it retrie
 </div>
 <br>
 
-### "  LLMs can reason over BM25 scores to Improve Listwise Reranking "
+## Performance Benchmarks
+We evaluated the system on a subset of the MS MARCO dataset. The results demonstrate a significant precision boost using the hybrid approach:
 
-https://arxiv.org/pdf/2506.14086
+| Method | MRR@10 (Accuracy) | Avg Latency |
+| :--- | :--- | :--- |
+| **BM25 (Sparse)** | 0.5594 | ~7 ms |
+| **FAISS (Dense)** | 0.7977 | ~64 ms |
+| **Hybrid + Rerank** | **0.8282** | ~165 ms |
 
+---
+## Future Work & State of the Art
 
-## Live Demo: 
+While this project implements the current industry standard (Bi-Encoder + Cross-Encoder), research in Neural Information Retrieval is moving fast.
 
-Here is a real execution showing why the **Two-Stage Architecture** is necessary.
+**Research Insight (2025): Listwise Reranking with LLMs**
+A promising direction to reduce the computational cost of Cross-Encoders is explored in the paper "LLMs can reason over BM25 scores to Improve Listwise Reranking" (https://arxiv.org/pdf/2506.14086).
 
-**User Query:** *"what is the function of mitochondria?"*
+The paper suggests that instead of feeding full document text to a heavy model, we can feed retrieval scores and metadata to a lightweight LLM. The LLM can "reason" about the distribution of scores to re-rank documents efficiently.
 
-### Stage 1: Hybrid Search (Before Reranking)
-*High Recall , Low Precision*
-The retriever finds documents containing keywords like "function" or "cell", but lacks deep understanding.
-> 1. "The main function of mitochondria is..." (Relevant)
-> 2. "Function **The Golgi complex** takes proteins..." (**Irrelevant**)
-> 3. "The **cytoplasm** is the cytosol... Its main function..." (**Irrelevant** - Wrong part of cell)
-
-### Stage 2: Cross-Encoder (After BERT)
-*High Precision.*
-The BERT model reads the pairs and understands that we specifically asked about *mitochondria*, filtering out the Golgi complex and Cytoplasm.
-
-> 1. **[Score: 9.59]** "The main function of mitochondria is the production of energy..."
-> 2. **[Score: 8.15]** "Mitochondria ... are organelles that carry out cellular respiration..."
-> 3. **[Score: 7.92]** "An organelle found in large numbers... The main function of the mitochondria is..."
-
-**Result:** The Reranker successfully eliminated noise and surfaced the most scientifically accurate definitions.
 
 
 

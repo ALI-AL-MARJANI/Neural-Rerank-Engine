@@ -52,6 +52,23 @@ A promising direction to reduce the computational cost of Cross-Encoders is expl
 
 The paper suggests that instead of feeding full document text to a heavy model, we can feed retrieval scores and metadata to a lightweight LLM. The LLM can "reason" about the distribution of scores to re-rank documents efficiently.
 
+--- 
+
+## Project Structure
+
+```text
+Neural-Rerank-Engine/
+├── data/                
+├── notebooks/
+│   └── demo.ipynb      
+├── src/
+│   ├── retrievers/      # Sparse (BM25), Dense (FAISS), & Hybrid Logic
+│   ├── rerankers/       # BERT Cross-Encoder 
+│   ├── benchmark.py     # Script to calculate MRR & Latency
+│   └── build_indices.py # Pipeline to ingest data & build indices
+└── requirements.txt
+
+
 
 
 

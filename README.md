@@ -11,7 +11,7 @@
 
 Standard Vector Search (RAG) often suffers from a "precision" problem: it retrieves documents that are *semantically* similar but factually irrelevant. Keyword search (BM25) is precise but misses context.
 
-**Neural-Rerank-Engine** solves this by implementing an industry-standard **Retrieve & Rerank** architecture:
+**Neural-Rerank-Engine** solves this by implementing a standard **Retrieve & Rerank** architecture:
 
 1.  **Stage 1 (Retrieval):** Fast retrieval of the top 50 candidates using a **Hybrid** approach (Sparse BM25 + Dense Bi-Encoder Embeddings).
 2.  **Stage 2 (Reranking):** A heavy **Cross-Encoder (BERT)** inspects the query-document pairs to re-order results with high semantic understanding.
@@ -51,6 +51,7 @@ While this project implements the current industry standard (Bi-Encoder + Cross-
 A promising direction to reduce the computational cost of Cross-Encoders is explored in the paper "LLMs can reason over BM25 scores to Improve Listwise Reranking" (https://arxiv.org/pdf/2506.14086).
 
 The paper suggests that instead of feeding full document text to a heavy model, we can feed retrieval scores and metadata to a lightweight LLM. The LLM can "reason" about the distribution of scores to re-rank documents efficiently.
+
 
 
 

@@ -1,10 +1,11 @@
-
-torch
-numpy
-pandas
-datasets      
-sentence-transformers
-faiss-cpu
-rank_bm25      
-fastapi
-uvicorn
+# Runtime dependencies of the API (pinned for reproducible builds).
+# torch is NOT listed here: install the CPU-only build first, e.g.
+#   pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+sentence-transformers==5.1.2
+transformers==4.57.3
+faiss-cpu==1.13.0
+rank-bm25==0.2.2
+numpy==2.0.2
+fastapi==0.128.0
+uvicorn==0.39.0
+prometheus-fastapi-instrumentator==7.1.0

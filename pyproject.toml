@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rerank-engine"
+version = "1.0.0"
+description = "Hybrid retrieval (BM25 + FAISS) with cross-encoder reranking, served with FastAPI"
+readme = "README.md"
+requires-python = ">=3.9"
+# Dependencies are pinned in requirements.txt (torch must come from the CPU-only index).
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+extend-exclude = ["notebooks"]
+
+[tool.ruff.lint]
+# E = pycodestyle errors, F = Pyflakes (unused imports, undefined names...), I = import sorting
+select = ["E", "F", "I"]

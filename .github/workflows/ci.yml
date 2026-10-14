@@ -1,0 +1,96 @@
+# CI/CD pipeline, run by GitHub Actions.
+#   CI (job "test")  : on every push and pull request -> lint (ruff) + tests (pytest)
+#   CD (job "docker"): on push to main or a v* tag    -> build the image, push it to ghcr.io
+name: CI
+
+# When the workflow runs
+on:
+  push:
+    branches: ["**"]      # every branch
+    tags: ["v*"]          # and version tags like v1.0.0
+  pull_request:           # every pull request
+
+# Default permissions of the GITHUB_TOKEN for all jobs: read the code only
+permissions:
+  contents: read
+
+# The image name on GitHub Container Registry (must be lowercase)
+env:
+  IMAGE_NAME: ghcr.io/ali-al-marjani/neural-rerank-engine
+
+jobs:
+
+  # ------------------------------------------------------------------ CI
+  test:
+    runs-on: ubuntu-latest                 # a fresh Linux VM given by GitHub
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v6          # clones the repository into the VM
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"           # same Python as the Docker image
+          cache: pip                       # reuse downloaded packages between runs
+
+      - name: Install dependencies
+        run: |
+          pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt -r requirements-dev.txt
+          pip install -e .
+
+      - name: Lint with ruff
+        run: ruff check .                  # fails the job on any lint error
+
+      - name: Run tests
+        run: pytest -v                     # fake engine: no model download
+
+  # ------------------------------------------------------------------ CD
+  docker:
+    needs: test                            # only if lint + tests passed
+    # only for a push on main or a v* tag (not for pull requests or other branches)
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write                      # allows GITHUB_TOKEN to push to ghcr.io
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v6
+
+      - name: Set up QEMU                  # emulator: lets an amd64 VM build an arm64 image
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx         # Docker's builder (multi-platform, cache)
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}                # the user who triggered the run
+          password: ${{ secrets.GITHUB_TOKEN }}        # created automatically by GitHub
+
+      - name: Compute image tags
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha
+            type=semver,pattern={{version}}
+          # latest  : only on main
+          # sha     : "sha-<7 chars of the commit>", one tag per commit
+          # semver  : "1.0.0" when the push is the tag v1.0.0
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64   # amd64 = cloud servers, arm64 = Apple Silicon (minikube)
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha                 # reuse layers from previous runs
+          cache-to: type=gha,mode=max

@@ -1,0 +1,4 @@
+# Tests, lint and load test
+pytest==8.4.2
+httpx==0.28.1
+ruff==0.17.0

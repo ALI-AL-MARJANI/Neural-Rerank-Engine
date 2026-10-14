@@ -1,0 +1,9 @@
+# Prometheus configuration used by docker-compose.yml
+global:
+  scrape_interval: 5s          # read the metrics every 5 seconds
+
+scrape_configs:
+  - job_name: rerank-api       # label added to every metric of this target
+    metrics_path: /metrics     # the endpoint exposed by FastAPI
+    static_configs:
+      - targets: ["api:8000"]  # "api" = the service name in docker-compose.yml

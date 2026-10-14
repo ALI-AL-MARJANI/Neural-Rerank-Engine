@@ -1,0 +1,8 @@
+# Tells Grafana where Prometheus is, so no manual setup is needed in the UI
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy                  # Grafana's server queries Prometheus (not the browser)
+    url: http://prometheus:9090    # "prometheus" = the service name in docker-compose.yml
+    isDefault: true

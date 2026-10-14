@@ -1,0 +1,31 @@
+# Files that are NOT sent to Docker when building (smaller, faster, no secrets)
+
+# Local Python environment and caches (the image installs its own)
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Data is rebuilt inside the image by scripts/build_index.py
+data/
+
+# Git history, editor and OS files
+.git/
+.github/
+.vscode/
+.idea/
+.DS_Store
+.env
+
+# Not needed to run the API
+notebooks/
+assets/
+docs/
+tests/
+k8s/
+monitoring/
+docker-compose.yml
+Makefile
+RUNBOOK.md

@@ -1,31 +1,31 @@
-# RUNBOOK : les commandes à lancer, dans l'ordre
+# RUNBOOK: commands to run, in order
 
-Chaque étape indique **ce que tu dois voir**. Si ce n'est pas le cas, regarde la section « Dépannage ».
-Les valeurs marquées `<à mesurer>` sont à reporter dans le README une fois mesurées.
+Each step shows **what you should see**. If it does not match, check the "Troubleshooting" section.
+Values marked `<to be measured>` must be copied into the README once measured.
 
 ---
 
-## 0. Prérequis (une seule fois)
+## 0. Prerequisites (once)
 
 ```bash
-brew install minikube kubectl        # outils Kubernetes
-docker --version                     # Docker Desktop doit être lancé
+brew install minikube kubectl
+docker --version
 ```
 
-Dans **Docker Desktop → Settings → Resources** : au moins **4 CPUs** et **8 GB** de mémoire.
-minikube va en demander 6 GB, et chaque pod de l'API en réserve 1 GB.
+In **Docker Desktop → Settings → Resources**: at least **4 CPUs** and **8 GB** of memory
+(minikube asks for 6 GB, and each API pod reserves 1 GB).
 
 ---
 
-## 1. En local (Python)
+## 1. Local (Python)
 
 ```bash
 cd ~/Desktop/projects/Neural-Rerank-Engine
 source venv/bin/activate
-make install          # déjà fait dans ce venv, à refaire sur une nouvelle machine
-make index            # télécharge SciFact + les 2 modèles, construit data/indices
+make install
+make index
 ```
-Tu dois voir :
+Expected:
 ```
 Loaded 5183 SciFact documents
  BM25 Index built with 5183 documents
@@ -35,24 +35,26 @@ Indices written to data/indices in ...s
 ```
 
 ```bash
-make test             # 11 passed
-make lint             # All checks passed!
-make run              # laisse tourner ce terminal
+make test
+make lint
+make run
 ```
-Tu dois voir `Engine ready in ...s`, puis `Uvicorn running on http://127.0.0.1:8000`.
+`make test` → `11 passed`. `make lint` → `All checks passed!`.
+`make run` → `Engine ready in ...s`, then `Uvicorn running on http://127.0.0.1:8000`. Keep this terminal open.
 
-Dans un **2e terminal** :
+In a **second terminal**:
 ```bash
-curl localhost:8000/health        # {"status":"ok"}
-curl localhost:8000/ready         # {"status":"ready"}
+curl localhost:8000/health
+curl localhost:8000/ready
 curl -X POST localhost:8000/search -H 'Content-Type: application/json' \
      -d '{"query": "vitamin D deficiency and multiple sclerosis", "top_k": 3}'
-# -> {"results":[{"doc_id":"...","text":"...","score":...}, ...],"latency_ms":...}
 curl localhost:8000/metrics | grep http_requests_total
 python scripts/load_test.py -n 100 -c 1
 ```
-Ouvre aussi http://localhost:8000/docs (Swagger) et essaie `POST /search` depuis le navigateur.
-Ensuite, Ctrl+C dans le 1er terminal.
+Expected: `{"status":"ok"}`, `{"status":"ready"}`, then
+`{"results":[{"doc_id":"...","text":"...","score":...}, ...],"latency_ms":...}`.
+Also open http://localhost:8000/docs (Swagger) and try `POST /search` from the browser.
+Stop the server with Ctrl+C in the first terminal.
 
 ---
 
@@ -61,44 +63,50 @@ Ensuite, Ctrl+C dans le 1er terminal.
 ```bash
 make docker-build
 ```
-- Le premier build est long : téléchargement de torch, du corpus et des modèles, puis construction de l'index.
-  Durée : `<à mesurer>`. Un rebuild après une simple modification du code est plus rapide grâce au cache des layers.
-- À la fin, tu dois voir `naming to docker.io/library/neural-rerank-engine:local`.
+- The first build is slow: it downloads torch, the corpus and the models, and builds the index.
+  Duration: `<to be measured>`. Rebuilding after a code-only change is faster thanks to the layer cache.
+- At the end you should see `naming to docker.io/library/neural-rerank-engine:local`.
 
-**Taille de l'image** (à reporter dans le README) :
+**Image size** (copy into the README):
 ```bash
 docker images neural-rerank-engine:local --format '{{.Repository}}:{{.Tag}}  {{.Size}}'
 ```
-Taille : `<à mesurer>`.
+Size: `<to be measured>`.
 
 ```bash
 make docker-run
 ```
-Dans un 2e terminal :
+In a second terminal:
 ```bash
-docker ps                          # STATUS : "Up ... (health: starting)" puis "(healthy)" après ~30 s
-curl localhost:8000/ready          # {"status":"ready"}
-python scripts/load_test.py -n 100 -c 1     # latence dans Docker : <à mesurer>
-docker logs rerank-api | tail      # une ligne par requête : "POST /search 200 ...ms"
+docker ps
+curl localhost:8000/ready
+python scripts/load_test.py -n 100 -c 1
+docker logs rerank-api | tail
 ```
-Test « sans internet » (optionnel) : coupe le Wi-Fi, relance `make docker-run`. `/ready` doit répondre, parce que tout est dans l'image.
+- `docker ps`: STATUS shows `Up ... (health: starting)`, then `(healthy)` after ~30 s.
+- Latency in Docker: `<to be measured>`.
+- `docker logs`: one line per request, e.g. `POST /search 200 ...ms`.
 
-Ctrl+C pour arrêter.
+Optional "no internet" test: turn off Wi-Fi and run `make docker-run` again. `/ready` must still answer,
+because everything is inside the image.
+
+Stop with Ctrl+C.
 
 ---
 
 ## 3. Docker Compose (API + Prometheus + Grafana)
 
 ```bash
-make compose-up                                # API + Prometheus
-# ou, avec Grafana :
+make compose-up
+```
+or, with Grafana:
+```bash
 docker compose --profile grafana up --build
 ```
-1. Envoie un peu de trafic : `python scripts/load_test.py -n 50 -c 2`
-2. Ouvre http://localhost:9090/targets : la cible `rerank-api` (`api:8000`) doit être **UP**.
-3. Ouvre http://localhost:9090/graph et tape :
-   `sum(rate(http_requests_total{handler="/search"}[1m]))`, puis clique « Execute ». Tu dois voir une courbe.
-4. Pour Grafana : http://localhost:3000 (admin / admin), puis Explore. La source « Prometheus » est déjà configurée.
+1. Send some traffic: `python scripts/load_test.py -n 50 -c 2`
+2. Open http://localhost:9090/targets: the `rerank-api` target (`api:8000`) must be **UP**.
+3. Open http://localhost:9090/graph, type `sum(rate(http_requests_total{handler="/search"}[1m]))`, click Execute: you should see a curve.
+4. Grafana: http://localhost:3000 (admin / admin) → Explore. The "Prometheus" data source is already configured.
 
 ```bash
 make compose-down
@@ -106,27 +114,27 @@ make compose-down
 
 ---
 
-## 4. GitHub : CI/CD
+## 4. GitHub: CI/CD
 
-Après le `git push` (les commandes de commit sont dans le résumé donné par Claude) :
+After `git push`:
 
-1. **Actions** : https://github.com/ALI-AL-MARJANI/Neural-Rerank-Engine/actions
-   - Le job `test` doit devenir vert ✅ (lint + 11 tests).
-   - Le job `docker` démarre ensuite, seulement sur `main`. Il est beaucoup plus long, car il construit
-     aussi l'image arm64 par émulation (QEMU). Durée : `<à mesurer>`.
-2. **Package** : https://github.com/ALI-AL-MARJANI?tab=packages
-   L'image `neural-rerank-engine` doit apparaître, avec les tags `latest` et `sha-xxxxxxx`.
-3. **Rendre l'image publique** (obligatoire pour que minikube puisse la télécharger sans mot de passe) :
-   ouvre le package, puis **Package settings → Danger Zone → Change visibility → Public**.
-   Une nouvelle image est privée par défaut, et le passage en public est définitif.
-4. Le badge CI en haut du README doit être vert.
+1. **Actions**: https://github.com/ALI-AL-MARJANI/Neural-Rerank-Engine/actions
+   - The `test` job must be green ✅ (lint + 11 tests).
+   - The `docker` job then starts (on `main` only). It takes much longer because it also builds
+     the arm64 image through emulation (QEMU). Duration: `<to be measured>`.
+2. **Package**: https://github.com/ALI-AL-MARJANI?tab=packages
+   The `neural-rerank-engine` image must appear with the tags `latest` and `sha-xxxxxxx`.
+3. **Make the image public** (required for minikube to pull it without credentials):
+   package → **Package settings → Danger Zone → Change visibility → Public**.
+   New packages are private by default, and switching to public cannot be undone.
+4. The CI badge at the top of the README must be green.
 
-Vérification depuis le Mac :
+Check from the Mac:
 ```bash
 docker pull ghcr.io/ali-al-marjani/neural-rerank-engine:latest
 docker manifest inspect ghcr.io/ali-al-marjani/neural-rerank-engine:latest | grep architecture
-# -> "architecture": "amd64"  et  "architecture": "arm64"
 ```
+Expected: `"architecture": "amd64"` and `"architecture": "arm64"`.
 
 ---
 
@@ -135,15 +143,15 @@ docker manifest inspect ghcr.io/ali-al-marjani/neural-rerank-engine:latest | gre
 ```bash
 make k8s-deploy
 ```
-Tu dois voir `Done! kubectl is now configured to use "minikube"`, puis
-`The 'metrics-server' addon is enabled`, puis une ligne `... created` par objet
-(`configmap/rerank-config`, `deployment.apps/rerank-api`, `horizontalpodautoscaler...`, `service/rerank-api`, `prometheus...`).
+Expected: `Done! kubectl is now configured to use "minikube"`, then `The 'metrics-server' addon is enabled`,
+then one `... created` line per object (`configmap/rerank-config`, `deployment.apps/rerank-api`,
+`horizontalpodautoscaler...`, `service/rerank-api`, `prometheus...`).
 
 ```bash
-kubectl get pods -w       # Ctrl+C pour quitter le mode "watch"
+kubectl get pods -w
 ```
-Attendu, dans l'ordre : `ContainerCreating` (téléchargement de l'image, plusieurs minutes la 1re fois),
-puis `Running` avec `READY 0/1`, puis `READY 1/1` une fois que `/ready` répond.
+Expected, in order: `ContainerCreating` (pulling the image, several minutes the first time), then `Running`
+with `READY 0/1`, then `READY 1/1` once `/ready` answers. Quit the watch mode with Ctrl+C.
 ```
 NAME                          READY   STATUS    RESTARTS   AGE
 prometheus-xxxxxxxxxx-xxxxx   1/1     Running   0          2m
@@ -152,65 +160,71 @@ rerank-api-xxxxxxxxxx-yyyyy   1/1     Running   0          2m
 ```
 
 ```bash
-make k8s-status           # pods, service, HPA, et CPU/mémoire de chaque pod
+make k8s-status
 ```
-- `kubectl top pods` peut afficher `metrics not available yet` pendant ~1 minute après le démarrage. C'est normal.
-- Mémoire réelle d'un pod API : `<à mesurer>` (colonne MEMORY de `kubectl top pods`).
+- `kubectl top pods` may print `metrics not available yet` for ~1 minute after startup. This is normal.
+- Real memory of one API pod: `<to be measured>` (MEMORY column of `kubectl top pods`).
 
-**Tester l'API** :
+**Call the API**:
 ```bash
-make k8s-forward          # laisse tourner
-# 2e terminal :
+make k8s-forward
+```
+In a second terminal:
+```bash
 curl localhost:8000/ready
 curl -X POST localhost:8000/search -H 'Content-Type: application/json' -d '{"query":"statins lower LDL cholesterol","top_k":3}'
 ```
 
-**Prometheus dans le cluster** :
+**Prometheus in the cluster**:
 ```bash
 kubectl port-forward service/prometheus 9090:9090
 ```
-Ouvre http://localhost:9090/targets : le job `kubernetes-pods` doit lister **les 2 pods rerank-api, UP**.
+Open http://localhost:9090/targets: the `kubernetes-pods` job must list **the 2 rerank-api pods, UP**.
 
-**Voir l'HPA en action** (charge envoyée depuis l'intérieur du cluster, répartie par le Service sur tous les pods) :
+**See the HPA in action** (load sent from inside the cluster, so the Service spreads it over all pods).
+
+Terminal 1, watch the HPA:
 ```bash
-# terminal 1 : surveiller l'HPA
 kubectl get hpa rerank-api -w
-
-# terminal 2 : générer de la charge (le script est envoyé au pod via stdin)
+```
+Terminal 2, generate load (the script is sent to the pod through stdin):
+```bash
 kubectl run loadgen -i --rm --restart=Never \
   --image=ghcr.io/ali-al-marjani/neural-rerank-engine:latest -- \
   python - --url http://rerank-api -n 600 -c 8 < scripts/load_test.py
 ```
-Attendu dans le terminal 1 : la colonne `TARGETS` dépasse `70%` (par exemple `cpu: 180%/70%`), puis `REPLICAS` passe de 2 à 3, puis 4.
-Le terminal 2 affiche p50/p90 dans Kubernetes (`<à mesurer>`).
-Une fois la charge terminée, l'HPA attend **5 minutes** avant de redescendre à 2 pods. C'est le comportement par défaut, pour éviter les oscillations.
+Expected in terminal 1: `TARGETS` goes above `70%` (e.g. `cpu: 180%/70%`), then `REPLICAS` goes from 2 to 3, then 4.
+Terminal 2 prints p50/p90 inside Kubernetes (`<to be measured>`).
+After the load stops, the HPA waits **5 minutes** before scaling back down to 2 pods (default behavior, avoids flapping).
 
-**Rolling update** (mise à jour sans coupure) :
+**Rolling update** (update without downtime):
 ```bash
 kubectl rollout restart deployment/rerank-api
-kubectl rollout status deployment/rerank-api     # "successfully rolled out"
+kubectl rollout status deployment/rerank-api
 ```
+Expected: `deployment "rerank-api" successfully rolled out`.
 
-**Nettoyage** :
+**Cleanup**:
 ```bash
-make k8s-delete           # supprime les objets
-minikube stop             # arrête la VM (minikube delete pour tout effacer)
+make k8s-delete
+minikube stop
 ```
+(`minikube delete` erases the cluster completely.)
 
 ---
 
-## Dépannage
+## Troubleshooting
 
-| Symptôme | Cause probable | Solution |
+| Symptom | Likely cause | Fix |
 | :--- | :--- | :--- |
-| `ImagePullBackOff` | package ghcr.io encore privé, ou CD pas encore terminé | rendre le package public (étape 4.3), vérifier l'onglet Actions |
-| `ErrImagePull ... no matching manifest for linux/arm64` | image construite seulement pour amd64 | vérifier `platforms:` dans ci.yml et relancer le workflow |
-| Pod `OOMKilled` | limite mémoire trop basse | augmenter `limits.memory` dans deployment.yaml |
-| Pod `Pending` | pas assez de CPU/mémoire dans minikube | `minikube stop && minikube start --cpus=4 --memory=6g`, ou baisser `requests` |
-| `READY 0/1` longtemps | modèles en cours de chargement | `kubectl logs deploy/rerank-api` et attendre `Engine ready` |
-| HPA `cpu: <unknown>/70%` | metrics-server pas prêt | `minikube addons enable metrics-server` et attendre ~1 min |
+| `ImagePullBackOff` | ghcr.io package still private, or CD not finished | make the package public (step 4.3), check the Actions tab |
+| `ErrImagePull ... no matching manifest for linux/arm64` | image built for amd64 only | check `platforms:` in ci.yml and re-run the workflow |
+| Pod `OOMKilled` | memory limit too low | raise `limits.memory` in deployment.yaml |
+| Pod `Pending` | not enough CPU/memory in minikube | `minikube stop && minikube start --cpus=4 --memory=6g`, or lower `requests` |
+| `READY 0/1` for a long time | models still loading | `kubectl logs deploy/rerank-api` and wait for `Engine ready` |
+| HPA shows `cpu: <unknown>/70%` | metrics-server not ready | `minikube addons enable metrics-server` and wait ~1 min |
 
-**Alternative sans ghcr.io** (si tu veux tester minikube avant que le CD ait tourné) :
+**Without ghcr.io** (to test minikube before the CD has run):
 ```bash
 make docker-build
 minikube image load neural-rerank-engine:local

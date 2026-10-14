@@ -5,3 +5,7 @@ venv/
 .DS_Store
 .vscode/
 data/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/

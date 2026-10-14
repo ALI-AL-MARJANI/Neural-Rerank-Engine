@@ -1,9 +1,10 @@
 import os
-import faiss
-import numpy as np
 import pickle
-from typing import List, Dict, Any
+from typing import Any, Dict, List
+
+import faiss
 from sentence_transformers import SentenceTransformer
+
 
 class DenseRetriever:
     """
@@ -43,7 +44,7 @@ class DenseRetriever:
         """
         Semantic search using vector similarity.
         """
-        if not self.faiss_index:
+        if self.faiss_index is None:
             self.load_index()
 
        
@@ -68,7 +69,7 @@ class DenseRetriever:
     def load_index(self):
         """Loads the FAISS index and metadata from disk."""
         if not os.path.exists(self.index_path):
-            raise FileNotFoundError(f" Index not found at {self.index_dir}. Run build_indices.py first.")
+            raise FileNotFoundError(f" Index not found at {self.index_dir}. Run scripts/build_index.py first.")
         
         self.faiss_index = faiss.read_index(self.index_path)
         with open(self.meta_path, "rb") as f:

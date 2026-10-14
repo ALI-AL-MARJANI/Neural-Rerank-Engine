@@ -1,5 +1,7 @@
-from typing import List, Dict, Any
+from typing import Any, Dict, List
+
 from sentence_transformers import CrossEncoder
+
 
 class BertReranker:
     """
@@ -23,9 +25,9 @@ class BertReranker:
         # Predict scores
         scores = self.model.predict(pairs)
         
-        # Attach scores to documents
-        for doc, score in zip(docs, scores):
-            doc['rerank_score'] = float(score)
+        # Attach scores to copies of the documents (the indexed corpus is shared
+        # between concurrent API requests, so it must never be modified)
+        docs = [{**doc, 'rerank_score': float(score)} for doc, score in zip(docs, scores)]
 
         # Sort by new score (Descending)
         sorted_docs = sorted(docs, key=lambda x: x['rerank_score'], reverse=True)

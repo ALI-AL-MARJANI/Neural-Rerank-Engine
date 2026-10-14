@@ -1,7 +1,9 @@
-import pickle
 import os
-from typing import List, Dict, Any
+import pickle
+from typing import Any, Dict, List
+
 from rank_bm25 import BM25Okapi
+
 
 class BM25Retriever:
     """

@@ -1,0 +1,2 @@
+# Only needed to download the corpus in scripts/build_index.py (not shipped in the final image)
+datasets==4.4.2

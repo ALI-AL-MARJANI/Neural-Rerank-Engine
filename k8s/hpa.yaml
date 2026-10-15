@@ -1,0 +1,21 @@
+# HorizontalPodAutoscaler: adds/removes pods based on CPU usage.
+# Needs metrics-server:  minikube addons enable metrics-server
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: rerank-api
+spec:
+  scaleTargetRef:                # what to scale
+    apiVersion: apps/v1
+    kind: Deployment
+    name: rerank-api
+  minReplicas: 2
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70   # target: average CPU = 70% of the request (0.7 x 500m = 350m)
+# Scale-up is fast; scale-down waits 5 minutes of low CPU by default (avoids flapping).

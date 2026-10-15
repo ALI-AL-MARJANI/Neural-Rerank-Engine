@@ -1,0 +1,16 @@
+# Service: one stable name + IP in front of the pods, with load balancing.
+# Pods come and go (new IPs each time); the Service always finds the current ready ones.
+apiVersion: v1
+kind: Service
+metadata:
+  name: rerank-api
+spec:
+  type: ClusterIP                # reachable only inside the cluster (the default type)
+  selector:
+    app: rerank-api              # send traffic to the pods with this label (and ready)
+  ports:
+    - name: http
+      port: 80                   # port of the Service
+      targetPort: http           # named container port (8000) in deployment.yaml
+# From the Mac:  kubectl port-forward service/rerank-api 8000:80
+# then open http://localhost:8000/docs

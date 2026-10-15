@@ -1,0 +1,12 @@
+# ConfigMap: non-secret settings, injected into the pods as environment variables.
+# Change a value here, `kubectl apply`, then restart the pods to use it:
+#   kubectl rollout restart deployment/rerank-api
+apiVersion: v1                 # core Kubernetes API group
+kind: ConfigMap
+metadata:
+  name: rerank-config          # referenced by envFrom in deployment.yaml
+data:                          # key: value pairs (always strings)
+  TOP_K: "50"                                            # candidates sent to the reranker
+  DENSE_MODEL: "sentence-transformers/all-MiniLM-L6-v2"  # must be inside the image (offline)
+  RERANK_MODEL: "cross-encoder/ms-marco-MiniLM-L-6-v2"   # must be inside the image (offline)
+  OMP_NUM_THREADS: "2"         # torch CPU threads = the pod's CPU limit (avoids throttling)

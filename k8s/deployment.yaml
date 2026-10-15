@@ -1,0 +1,59 @@
+# Deployment: keeps N identical pods of the API running, and replaces them
+# progressively (rolling update) when the image or the config changes.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rerank-api
+  labels:
+    app: rerank-api
+spec:
+  replicas: 2                        # 2 pods (the HPA can then scale between 2 and 4)
+  selector:
+    matchLabels:
+      app: rerank-api                # this Deployment manages pods with this label
+  strategy:
+    type: RollingUpdate              # replace pods one by one, no downtime
+    rollingUpdate:
+      maxUnavailable: 0              # never go below 2 ready pods during an update
+      maxSurge: 1                    # start 1 new pod before removing an old one
+  template:                          # the pod "blueprint"
+    metadata:
+      labels:
+        app: rerank-api              # must match the selector above (and the Service)
+      annotations:                   # read by Prometheus (k8s/prometheus.yaml) to find the pods
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/ali-al-marjani/neural-rerank-engine:latest   # pushed by GitHub Actions
+          imagePullPolicy: Always    # "latest" moves: always check the registry for a newer one
+          ports:
+            - name: http
+              containerPort: 8000    # uvicorn listens here (see Dockerfile CMD)
+          envFrom:
+            - configMapRef:
+                name: rerank-config  # every key of the ConfigMap becomes an env variable
+          resources:
+            requests:                # reserved for the pod: used by the scheduler and the HPA
+              cpu: "500m"            # 0.5 CPU core
+              memory: "1Gi"
+            limits:                  # hard maximum
+              cpu: "2"               # CPU above the limit is throttled (slowed down)
+              memory: "2Gi"          # memory above the limit -> the container is killed (OOMKilled)
+          readinessProbe:            # "can this pod receive traffic?"
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 10  # wait 10s after start before the first check
+            periodSeconds: 5         # then check every 5s
+            failureThreshold: 3      # 3 failures in a row -> removed from the Service
+          livenessProbe:             # "is this process still alive?"
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 60  # leave time to load the models before the first check
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3      # 3 failures in a row -> Kubernetes restarts the container

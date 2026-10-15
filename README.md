@@ -58,7 +58,7 @@ Dockerfile               multi-stage image, CPU-only torch, non-root
 docker-compose.yml       API + Prometheus (+ Grafana)
 k8s/                     Deployment, Service, ConfigMap, HPA, Prometheus
 .github/workflows/ci.yml lint + tests, then build & push to ghcr.io
-docs/MLOPS_GUIDE.md      detailed explanation of every file (in French)
+docs/MLOPS_GUIDE.md      detailed explanation of every file
 RUNBOOK.md               step-by-step commands with expected output
 ```
 
@@ -166,4 +166,4 @@ No retrieval-quality metric (MRR, nDCG) is reported for now.
 ## Limitations
 
 Runs locally on minikube (no cloud), CPU only (no GPU), no authentication, basic monitoring
-(no alerting, no tracing). Details in [docs/MLOPS_GUIDE.md](docs/MLOPS_GUIDE.md#limites).
+(no alerting, no tracing). Details in [docs/MLOPS_GUIDE.md](docs/MLOPS_GUIDE.md#limitations).

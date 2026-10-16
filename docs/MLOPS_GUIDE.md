@@ -240,7 +240,7 @@ initContainer that downloads from object storage (S3/GCS).
 macOS while the image is Linux), `data/` (rebuilt inside the image), `.git/`, notebooks, tests, docs, k8s…
 Faster build, smaller image, and no risk of copying a `.env` with secrets.
 
-**Image size**: `<to be measured>` with `docker images neural-rerank-engine:local` (see RUNBOOK).
+**Image size**: 2.1 GB on disk, 532 MB compressed (`docker images neural-rerank-engine:local`, see RUNBOOK).
 
 ---
 
@@ -278,7 +278,7 @@ resolved to an IP by the internal DNS of the compose network.
   packages are reused between runs).
 - Install: CPU torch, then `requirements.txt` + `requirements-dev.txt`, then `pip install -e .`.
 - `ruff check .`: linter; fails on an undefined name, an unused import or badly sorted imports (rules `E`, `F`, `I`).
-- `pytest -v`: the 11 tests. If a step fails, the job is red and CD does not start.
+- `pytest -v`: the 12 tests. If a step fails, the job is red and CD does not start.
 
 **`docker` job (CD)**:
 - `needs: test`: only if CI is green.
@@ -341,7 +341,8 @@ labels), `spec` (desired state).
   - `limits` (`cpu: 2`, `memory: 2Gi`): the maximum. CPU above it = slowed down (throttling); memory above it =
     container **killed** (`OOMKilled`).
   - The values: locally the process used ~350 to 460 MB of RAM (RSS measured on macOS, Python 3.9). 1 Gi leaves a
-    margin. Tune them with `kubectl top pods` (`<to be measured>`).
+    margin. Measured in minikube with `kubectl top pods`: 416 Mi idle, 568 Mi just after a search. But one rerank
+    allocates a lot of temporary memory: 4 searches at once in one pod went over 2 Gi (see `MAX_CONCURRENT_SEARCHES`).
 - `readinessProbe` on `/ready`: every 5 s, after 10 s; 3 failures → the pod is removed from the Service.
 - `livenessProbe` on `/health`: every 10 s, after **60 s** (so a pod loading its models is not killed); 3 failures → restart.
 - Why `/health` does **not** check the model: if liveness depended on an external service or a slow state, a temporary
@@ -410,7 +411,7 @@ minikube creates a Kubernetes "node" inside a Docker Desktop container.
 
 Reading: reranking is ~97% of the time (~490 ms out of ~500). With 4 parallel requests, throughput does not increase:
 one process already saturates the CPU and requests queue up (latency ×4). To get more throughput you need **more pods**
-(HPA), **fewer candidates** (`TOP_K`), or a faster model (ONNX, quantization, GPU). Docker/k8s: `<to be measured>`.
+(HPA), **fewer candidates** (`TOP_K`), or a faster model (ONNX, quantization, GPU). Docker (4 CPU VM) and minikube numbers: see the README.
 
 ---
 
@@ -597,6 +598,6 @@ Example: `curl -X POST localhost:8000/search -d '{"query":"statins lower LDL"}'`
   Also, the test queries came from the MS MARCO *train* split, on which the `ms-marco-MiniLM` cross-encoder was trained.
   A correct evaluation would use SciFact's **test** queries with their relevance judgments (qrels) and a metric such as
   nDCG@10. This is not done here.
-- **A fairly large image**: torch + models + indices inside the image (size `<to be measured>`). This is the price of
+- **A fairly large image**: torch + models + indices inside the image (2.1 GB, 532 MB compressed). This is the price of
   starting offline.
 - **`notebooks/demo.ipynb`** still uses the old MS MARCO benchmark and the old `src.*` imports: it is out of date.

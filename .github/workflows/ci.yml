@@ -10,6 +10,12 @@ on:
     tags: ["v*"]          # and version tags like v1.0.0
   pull_request:           # every pull request
 
+# A new push on the same branch cancels the run still in progress for that branch
+# (no point finishing an 18 min image build for a commit that is already outdated)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 # Default permissions of the GITHUB_TOKEN for all jobs: read the code only
 permissions:
   contents: read

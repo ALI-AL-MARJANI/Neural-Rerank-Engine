@@ -1,7 +1,7 @@
 # RUNBOOK: commands to run, in order
 
 Each step shows **what you should see**. If it does not match, check the "Troubleshooting" section.
-Values marked `<to be measured>` must be copied into the README once measured.
+Measured values (Apple M4, Docker Desktop VM with 4 CPU / 8 GB, minikube with 4 CPU / 6 GB) are also in the README.
 
 ---
 
@@ -64,14 +64,14 @@ Stop the server with Ctrl+C in the first terminal.
 make docker-build
 ```
 - The first build is slow: it downloads torch, the corpus and the models, and builds the index.
-  Duration: `<to be measured>`. Rebuilding after a code-only change is faster thanks to the layer cache.
+  Duration: 4 min 17 s for the first build (the index step alone: 156 s). Rebuilding after a code-only change is faster thanks to the layer cache.
 - At the end you should see `naming to docker.io/library/neural-rerank-engine:local`.
 
 **Image size** (copy into the README):
 ```bash
 docker images neural-rerank-engine:local --format '{{.Repository}}:{{.Tag}}  {{.Size}}'
 ```
-Size: `<to be measured>`.
+Size: 2.1 GB on disk (532 MB compressed, as pushed to the registry).
 
 ```bash
 make docker-run
@@ -84,7 +84,8 @@ python scripts/load_test.py -n 100 -c 1
 docker logs rerank-api | tail
 ```
 - `docker ps`: STATUS shows `Up ... (health: starting)`, then `(healthy)` after ~30 s.
-- Latency in Docker: `<to be measured>`.
+- Latency in Docker (`-n 100 -c 1`): p50 2925 ms, p90 3073 ms, p99 3378 ms, 0 errors.
+  About 6x slower than native: the Docker VM has 4 CPU (the native run used all 10 cores of the M4).
 - `docker logs`: one line per request, e.g. `POST /search 200 ...ms`.
 
 Optional "no internet" test: turn off Wi-Fi and run `make docker-run` again. `/ready` must still answer,
@@ -119,9 +120,9 @@ make compose-down
 After `git push`:
 
 1. **Actions**: https://github.com/ALI-AL-MARJANI/Neural-Rerank-Engine/actions
-   - The `test` job must be green ✅ (lint + 11 tests).
+   - The `test` job must be green ✅ (lint + 12 tests).
    - The `docker` job then starts (on `main` only). It takes much longer because it also builds
-     the arm64 image through emulation (QEMU). Duration: `<to be measured>`.
+     the arm64 image through emulation (QEMU). Duration: about 18 min.
 2. **Package**: https://github.com/ALI-AL-MARJANI?tab=packages
    The `neural-rerank-engine` image must appear with the tags `latest` and `sha-xxxxxxx`.
 3. **Make the image public** (required for minikube to pull it without credentials):
@@ -163,7 +164,7 @@ rerank-api-xxxxxxxxxx-yyyyy   1/1     Running   0          2m
 make k8s-status
 ```
 - `kubectl top pods` may print `metrics not available yet` for ~1 minute after startup. This is normal.
-- Real memory of one API pod: `<to be measured>` (MEMORY column of `kubectl top pods`).
+- Real memory of one API pod: 416 Mi (idle) to 568 Mi (just after a search) (MEMORY column of `kubectl top pods`).
 
 **Call the API**:
 ```bash
@@ -191,10 +192,14 @@ Terminal 2, generate load (the script is sent to the pod through stdin):
 ```bash
 kubectl run loadgen -i --rm --restart=Never \
   --image=ghcr.io/ali-al-marjani/neural-rerank-engine:latest -- \
-  python - --url http://rerank-api -n 600 -c 8 < scripts/load_test.py
+  python - --url http://rerank-api -n 200 -c 8 < scripts/load_test.py
 ```
 Expected in terminal 1: `TARGETS` goes above `70%` (e.g. `cpu: 180%/70%`), then `REPLICAS` goes from 2 to 3, then 4.
-Terminal 2 prints p50/p90 inside Kubernetes (`<to be measured>`).
+Measured: `cpu: 304%/70%` with 2 pods → `REPLICAS` 4; with 4 pods the average dropped to ~195%.
+Terminal 2 prints (`-n 200 -c 8`, 2 → 4 pods): p50 21699 ms, p90 42868 ms, p99 56819 ms, 0.3 req/s, 4 errors out of 200
+(probably requests that hit the client's 60 s timeout while waiting in the queue).
+Throughput does **not** go up with 4 pods: all pods share the same single minikube node (4 CPU), which is already
+saturated. The HPA adds pods; on a real cluster, the *cluster autoscaler* would add nodes to give them CPU.
 After the load stops, the HPA waits **5 minutes** before scaling back down to 2 pods (default behavior, avoids flapping).
 
 **Rolling update** (update without downtime):

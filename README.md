@@ -159,7 +159,21 @@ throughput stays at ~2 req/s (latency grows ~4x): one process already uses all C
 This is why the service scales **horizontally** (more pods, HPA).
 
 Startup (loading models + indices): 11.3 s on the same machine.
-Docker and Kubernetes numbers: *to be measured* (see [RUNBOOK.md](RUNBOOK.md)).
+**Docker and Kubernetes** (same Mac, but the Docker Desktop VM only gets **4 CPU / 8 GB**, and minikube runs inside
+it with 4 CPU / 6 GB, so these numbers are not comparable with the native ones above):
+
+| Setup | Requests | Concurrency | p50 | p90 | p99 | Throughput | Errors |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Docker, 1 container | 100 | 1 | 2925 ms | 3073 ms | 3378 ms | – | 0 |
+| Docker compose, 1 container | 50 | 2 | 5872 ms | 6108 ms | 6405 ms | 0.3 req/s | 0 |
+| minikube, HPA 2 → 4 pods | 200 | 8 | 21699 ms | 42868 ms | 56819 ms | 0.3 req/s | 4 |
+
+In minikube the HPA went from 2 to 4 pods (`cpu: 304%/70%`) and no pod restarted, but throughput stayed at 0.3 req/s:
+all pods share one 4-CPU node that is already saturated, so latency is mostly time spent waiting in line.
+Adding pods only helps when there is free CPU (on a real cluster: more nodes).
+
+Image: 2.1 GB on disk (532 MB compressed). API pod memory: 416 to 568 Mi (`kubectl top pods`).
+Full commands in [RUNBOOK.md](RUNBOOK.md).
 
 No retrieval-quality metric (MRR, nDCG) is reported for now.
 

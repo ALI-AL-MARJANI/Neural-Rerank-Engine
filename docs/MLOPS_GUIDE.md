@@ -267,6 +267,9 @@ resolved to an IP by the internal DNS of the compose network.
 **Purpose**: on every push, GitHub starts a clean Linux virtual machine that runs `ci.yml`.
 
 - `on: push: branches: ["**"], tags: ["v*"]` + `pull_request`: triggers. `"**"` = every branch.
+- `concurrency` with `group: <workflow>-<branch>` and `cancel-in-progress: true`: if you push twice in a row on the same
+  branch, the first run is cancelled. Without it, two ~18 min image builds ran in parallel and the older one could
+  finish last. Different branches (and tags) have different groups, so they do not cancel each other.
 - `permissions: contents: read`: by default the workflow token can only *read* the code (least privilege).
 - `env: IMAGE_NAME: ghcr.io/ali-al-marjani/neural-rerank-engine`: an image name must be **lowercase**, while the GitHub
   repo name has capitals, so it is written explicitly.
@@ -600,4 +603,5 @@ Example: `curl -X POST localhost:8000/search -d '{"query":"statins lower LDL"}'`
   nDCG@10. This is not done here.
 - **A fairly large image**: torch + models + indices inside the image (2.1 GB, 532 MB compressed). This is the price of
   starting offline.
-- **`notebooks/demo.ipynb`** still uses the old MS MARCO benchmark and the old `src.*` imports: it is out of date.
+- **`notebooks/demo.ipynb`** only shows reranking on 3 queries and the time per stage (stage 1 ~20 ms, rerank
+  ~490 ms on the M4): a qualitative demo, not a quality evaluation.

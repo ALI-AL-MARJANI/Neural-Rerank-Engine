@@ -14,6 +14,7 @@ class Settings:
     dense_model: str        # bi-encoder used by FAISS retrieval
     rerank_model: str       # cross-encoder used for reranking
     top_k: int              # number of hybrid candidates sent to the reranker
+    max_concurrent_searches: int  # searches running at the same time in one process (bounds memory)
 
     @property
     def bm25_path(self) -> str:
@@ -31,4 +32,5 @@ def get_settings() -> Settings:
         dense_model=os.getenv("DENSE_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
         rerank_model=os.getenv("RERANK_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2"),
         top_k=int(os.getenv("TOP_K", "50")),
+        max_concurrent_searches=int(os.getenv("MAX_CONCURRENT_SEARCHES", "1")),
     )

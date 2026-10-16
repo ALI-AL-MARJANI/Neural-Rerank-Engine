@@ -1,3 +1,7 @@
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+
 from fastapi.testclient import TestClient
 
 from rerank_engine.api import create_app
@@ -60,3 +64,28 @@ def test_metrics_endpoint(client):
     assert r.status_code == 200
     assert "http_requests_total" in r.text
     assert "http_request_duration_seconds" in r.text
+
+
+def test_searches_are_limited_to_max_concurrent(monkeypatch):
+    # A slow fake engine that records how many searches run at the same time
+    class SlowEngine:
+        running = 0
+        max_running = 0
+        lock = threading.Lock()
+
+        def search(self, query, top_k=10, rerank=True):
+            with self.lock:
+                self.running += 1
+                self.max_running = max(self.max_running, self.running)
+            time.sleep(0.05)
+            with self.lock:
+                self.running -= 1
+            return []
+
+    engine = SlowEngine()
+    monkeypatch.setenv("MAX_CONCURRENT_SEARCHES", "1")
+    with TestClient(create_app(engine_loader=lambda settings: engine)) as c:
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            codes = list(pool.map(lambda _: c.post("/search", json={"query": "x"}).status_code, range(8)))
+    assert codes == [200] * 8
+    assert engine.max_running == 1

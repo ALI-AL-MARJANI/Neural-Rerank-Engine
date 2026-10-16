@@ -94,7 +94,7 @@ Contents:
 ## 3. Python code
 
 ### `config.py`
-- **Purpose**: one place for the settings read from the environment: `INDEX_DIR`, `DENSE_MODEL`, `RERANK_MODEL`, `TOP_K`.
+- **Purpose**: one place for the settings read from the environment: `INDEX_DIR`, `DENSE_MODEL`, `RERANK_MODEL`, `TOP_K`, `MAX_CONCURRENT_SEARCHES`.
 - **Key lines**:
   - `@dataclass(frozen=True) class Settings`: a simple, immutable object holding the settings.
   - `bm25_path` / `dense_dir`: paths derived from `INDEX_DIR` (`bm25.pkl` and `dense/`).
@@ -314,6 +314,11 @@ labels), `spec` (desired state).
 - `TOP_K`, `DENSE_MODEL`, `RERANK_MODEL`: app settings. Model names must match the models **inside the image** (offline mode).
 - `OMP_NUM_THREADS: "2"`: number of torch CPU threads = the pod's CPU limit. Without it, torch sees every core of the
   node, starts too many threads, and Kubernetes throttles it as soon as it exceeds its limit.
+- `MAX_CONCURRENT_SEARCHES: "1"`: at most 1 search runs at a time in each pod; the other requests wait for their turn
+  (a `threading.Semaphore` in `api.py`). Found with the HPA load test: with 8 requests in flight, each pod ran 4 reranks
+  in parallel, went over its 2 Gi memory limit and was killed (`OOMKilled`). Running them one at a time costs no
+  throughput: one search already uses the pod's 2 CPUs (`OMP_NUM_THREADS`), and in Docker `-c 1` and `-c 2` gave the
+  same req/s. More throughput comes from more pods (HPA), not from more parallel work inside one pod.
 - Why a ConfigMap: change a setting **without rebuilding the image**. After `kubectl apply`, the pods must be restarted
   (`kubectl rollout restart`), because environment variables are read at startup.
 

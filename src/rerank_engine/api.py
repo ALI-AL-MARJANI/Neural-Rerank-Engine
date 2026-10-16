@@ -5,6 +5,7 @@ Run locally:  uvicorn rerank_engine.api:app --port 8000
 Interactive docs: http://localhost:8000/docs
 """
 import logging
+import threading
 import time
 from contextlib import asynccontextmanager
 from typing import Callable, List
@@ -58,6 +59,10 @@ def create_app(engine_loader: Callable[[Settings], object] = load_engine) -> Fas
         logger.info("Loading engine (index_dir=%s, top_k=%d)...", settings.index_dir, settings.top_k)
         start = time.perf_counter()
         app.state.engine = engine_loader(settings)
+        # At most N searches run at the same time; the others wait for a free slot.
+        # Each rerank allocates a lot of temporary memory: without this bound, a burst
+        # of parallel requests goes over the pod's memory limit (OOMKilled).
+        app.state.search_slots = threading.Semaphore(settings.max_concurrent_searches)
         logger.info("Engine ready in %.1fs", time.perf_counter() - start)
         yield
         # Runs once when the server stops.
@@ -99,8 +104,9 @@ def create_app(engine_loader: Callable[[Settings], object] = load_engine) -> Fas
         engine = app.state.engine
         if engine is None:
             raise HTTPException(status_code=503, detail="engine not loaded")
-        start = time.perf_counter()
-        results = engine.search(req.query, top_k=req.top_k, rerank=req.rerank)
+        start = time.perf_counter()  # includes the time spent waiting for a slot
+        with app.state.search_slots:
+            results = engine.search(req.query, top_k=req.top_k, rerank=req.rerank)
         latency_ms = (time.perf_counter() - start) * 1000
         return SearchResponse(results=results, latency_ms=round(latency_ms, 2))
 

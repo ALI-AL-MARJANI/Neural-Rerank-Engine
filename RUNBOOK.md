@@ -219,7 +219,7 @@ minikube stop
 | :--- | :--- | :--- |
 | `ImagePullBackOff` | ghcr.io package still private, or CD not finished | make the package public (step 4.3), check the Actions tab |
 | `ErrImagePull ... no matching manifest for linux/arm64` | image built for amd64 only | check `platforms:` in ci.yml and re-run the workflow |
-| Pod `OOMKilled` | memory limit too low | raise `limits.memory` in deployment.yaml |
+| Pod `OOMKilled` (`kubectl describe pod` → `Last State: Terminated, Reason: OOMKilled`) | too many searches at the same time in one pod (each rerank allocates a lot of temporary memory), or memory limit too low | keep `MAX_CONCURRENT_SEARCHES: "1"` in configmap.yaml; otherwise raise `limits.memory` in deployment.yaml |
 | Pod `Pending` | not enough CPU/memory in minikube | `minikube stop && minikube start --cpus=4 --memory=6g`, or lower `requests` |
 | `READY 0/1` for a long time | models still loading | `kubectl logs deploy/rerank-api` and wait for `Engine ready` |
 | HPA shows `cpu: <unknown>/70%` | metrics-server not ready | `minikube addons enable metrics-server` and wait ~1 min |

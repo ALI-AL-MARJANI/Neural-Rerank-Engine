@@ -1,183 +1,119 @@
+<div align="center">
+
 # Neural Rerank Engine
 
-[![CI](https://github.com/ALI-AL-MARJANI/Neural-Rerank-Engine/actions/workflows/ci.yml/badge.svg)](https://github.com/ALI-AL-MARJANI/Neural-Rerank-Engine/actions/workflows/ci.yml)
-![Python](https://img.shields.io/badge/Python-3.11-blue)
-![FastAPI](https://img.shields.io/badge/FastAPI-service-009688)
-![Docker](https://img.shields.io/badge/Docker-multi--stage-2496ED)
-![Kubernetes](https://img.shields.io/badge/Kubernetes-minikube-326CE5)
+**A two-stage search service, run like a real one:<br>FastAPI, Docker, Kubernetes, CI/CD and Prometheus.**
 
-A two-stage search service, run like a production service: **FastAPI** API, **Docker** image,
-**Kubernetes** deployment, **CI/CD with GitHub Actions** and **Prometheus** monitoring.
-
-1. **Retrieval (recall):** BM25 (keywords, `rank_bm25`) + dense retrieval (FAISS, `all-MiniLM-L6-v2`),
-   merged with **Reciprocal Rank Fusion** → top 50 candidates.
-2. **Reranking (precision):** a **cross-encoder** (`cross-encoder/ms-marco-MiniLM-L-6-v2`) scores each
-   (query, document) pair and re-orders the candidates.
-
-Demo corpus: [BEIR SciFact](https://huggingface.co/datasets/BeIR/scifact), 5,183 public scientific abstracts.
+</div>
 
 ---
 
-## Architecture
+It searches 5,183 scientific abstracts (BEIR **SciFact**). Stage 1 finds 50 candidates with **BM25** (keywords) and
+**FAISS** (embeddings), merged with Reciprocal Rank Fusion. Stage 2 re-orders them with a **cross-encoder**, a model
+that reads the query and each document together.
 
-```mermaid
-flowchart LR
-    C[Client] -->|POST /search| S[K8s Service<br/>ClusterIP]
-    S --> P[FastAPI pods<br/>2 to 4 replicas]
-    HPA[HPA<br/>CPU 70%] -. scales .-> P
-    P --> B[BM25]
-    P --> D[FAISS dense]
-    B --> F[RRF fusion<br/>top 50]
-    D --> F
-    F --> R[Cross-encoder<br/>reranker]
-    R -->|top_k results| P
-    PR[Prometheus] -. scrapes /metrics .-> P
-```
+## The numbers that matter
 
-```
-Client ──► K8s Service (ClusterIP) ──► Pods (FastAPI, 2 to 4 replicas)
-                                         │  BM25 ─┐
-                                         │        ├─► RRF ─► top 50 ─► cross-encoder ─► top_k
-                                         │  FAISS ┘
-Prometheus ── scrapes GET /metrics ──────┘
-```
+| | |
+|:---:|:---|
+| **+0.050**<br>nDCG@10 | What the cross-encoder adds over retrieval alone, on the 300 SciFact test queries. |
+| **515 ms** | The price: median latency per query with reranking, against 14.9 ms without. |
+| **2 → 4 pods** | Kubernetes doubled the pods under load, and throughput stayed at 0.3 req/s. |
+| **50 queries** | The first version's benchmark: too small and too easy to trust. |
 
-## Project layout
-
-```
-src/rerank_engine/       Python package
-  api.py                 FastAPI app (/health, /ready, /search, /metrics)
-  engine.py              pipeline: hybrid retrieval -> optional reranking
-  config.py              settings from environment variables
-  retrievers/            sparse.py (BM25), dense.py (FAISS), fusion.py (RRF), hybrid.py
-  rerankers/             bert_reranker.py (cross-encoder)
-scripts/build_index.py   downloads SciFact + models, builds the indices
-scripts/load_test.py     load test, prints p50/p90/p99 latency
-tests/                   pytest (fake engine, no model download)
-Dockerfile               multi-stage image, CPU-only torch, non-root
-docker-compose.yml       API + Prometheus (+ Grafana)
-k8s/                     Deployment, Service, ConfigMap, HPA, Prometheus
-.github/workflows/ci.yml lint + tests, then build & push to ghcr.io
-docs/MLOPS_GUIDE.md      detailed explanation of every file
-RUNBOOK.md               step-by-step commands with expected output
-```
-
-## API
-
-| Endpoint | Purpose |
-| :--- | :--- |
-| `GET /health` | Liveness: the process is running |
-| `GET /ready` | Readiness: models and indices are loaded (503 otherwise) |
-| `POST /search` | `{"query": str, "top_k": int = 10, "rerank": bool = true}` → `{"results": [{doc_id, text, score}], "latency_ms"}` |
-| `GET /metrics` | Prometheus metrics (request count, latency histogram, status codes) |
-| `GET /docs` | Interactive Swagger documentation |
-
-Configuration (environment variables): `INDEX_DIR` (default `data/indices`), `DENSE_MODEL`, `RERANK_MODEL`,
-`TOP_K` (number of candidates sent to the reranker, default 50).
+<p align="center">
+  <img src="assets/quality_vs_latency.png" alt="nDCG@10 vs latency for each search stage" width="90%">
+</p>
 
 ---
 
-## Run it
+## Similar is not relevant
 
-### 1. Local (Python)
+In RAG work, vector search kept returning passages that *sounded* related but didn't answer the question. The gap
+between "similar" and "relevant" is what a cross-encoder is meant to close, so the plan was to measure it.
 
-```bash
-python -m venv venv && source venv/bin/activate
-make install        # CPU torch + dependencies + package
-make index          # downloads SciFact and the models, builds data/indices (~1 min)
-make run            # http://localhost:8000/docs
-```
+## 0.8282 MRR on a test that was too easy
 
-```bash
-curl -X POST localhost:8000/search -H 'Content-Type: application/json' \
-     -d '{"query": "vitamin D deficiency and multiple sclerosis", "top_k": 3}'
-```
+The first version used an MS MARCO subset and **MRR@10** (1 divided by the rank of the first correct result):
 
-### 2. Docker
+| Stage | MRR@10 |
+|:---|:---:|
+| BM25 | 0.5594 |
+| dense (FAISS) | 0.7977 |
+| hybrid + cross-encoder | 0.8282 |
 
-```bash
-make docker-build   # the index and the models are built INTO the image
-make docker-run     # http://localhost:8000/docs (no internet needed at runtime)
-```
+The numbers looked good, but the test behind them was weak. It had 50 queries, the corpus was built from the first
+passage of each query, and that same passage was counted as the answer, without checking MS MARCO's own relevance
+labels. Hybrid search without the reranker was never measured, so there was no way to tell which stage did the work.
 
-### 3. Docker Compose (API + monitoring)
+## Which stage actually does the work?
 
-```bash
-make compose-up                               # API :8000, Prometheus :9090
-docker compose --profile grafana up --build   # + Grafana :3000 (admin / admin)
-```
+The service now runs on SciFact, so every stage was scored on its 300 test queries with the official BEIR labels
+(`scripts/eval_quality.py`, chart above). **nDCG@10** scores the top 10 results and gives more credit when the
+relevant abstracts are near the top.
 
-### 4. Kubernetes (minikube)
+- **Dense beats keywords:** +0.085 nDCG@10 over BM25.
+- **Fusion adds nothing to the ranking:** +0.001 over dense alone. It only finds a few more relevant abstracts in
+  the top 50 (recall 0.892 → 0.912).
+- **The reranker is the only stage that moves the top 10:** +0.050 [+0.019, +0.081], but at 515 ms per query
+  against 14.9 ms.
 
-```bash
-make k8s-deploy     # minikube start + metrics-server + kubectl apply -f k8s/
-make k8s-status     # pods should be Running and READY 1/1
-make k8s-forward    # http://localhost:8000/docs
-```
-
-Full step-by-step commands, with what you should see: [RUNBOOK.md](RUNBOOK.md).
+> Finding the right documents is cheap. Putting them in the right order is what costs half a second.
 
 ---
 
-## CI/CD
+## From script to service
 
-`.github/workflows/ci.yml` runs on GitHub Actions:
+The search is a **FastAPI** app (`/health`, `/ready`, `/search`, `/metrics`) in a multi-stage **Docker** image that
+bakes in the models and the index (2.1 GB, 532 MB compressed). **GitHub Actions** runs ruff and pytest on every push,
+then builds the image for amd64 and arm64 and pushes it to ghcr.io. **Kubernetes** runs it with an autoscaler (HPA),
+and **Prometheus** scrapes request counts and latency.
 
-- **CI** (every push and pull request): `ruff check .` then `pytest`. Tests use a fake engine, so
-  they run in under a second and download no model.
-- **CD** (push on `main` or tag `v*`, only if CI passed): builds the Docker image for
-  `linux/amd64` and `linux/arm64` and pushes it to
-  **`ghcr.io/ali-al-marjani/neural-rerank-engine`** with the tags `latest` and `sha-<commit>`
-  (plus `1.2.3` for a tag `v1.2.3`). Authentication uses the built-in `GITHUB_TOKEN`, no secret to create.
+On the Mac, natively, one process serves 2.0 req/s with reranking (489 ms median) and 71.8 req/s without (13 ms).
+Sending 4 requests at once doesn't help (1.8 req/s): one search already uses every CPU core.
 
-## Monitoring
+The first load test in Kubernetes found a real bug. With 8 requests in flight, each pod ran 4 reranks in parallel,
+went over its 2 Gi memory limit and got **OOMKilled**. Every rerank allocates a lot of temporary memory. The fix is a
+semaphore in `api.py` that lets one search run per pod at a time (`MAX_CONCURRENT_SEARCHES=1`), at no throughput
+cost, since one search already fills the pod's CPUs. A test now checks the limit.
 
-- Each request is logged on one line: `POST /search 200 523.4ms`.
-- `GET /metrics` exposes Prometheus metrics, via `prometheus-fastapi-instrumentator`:
-  `http_requests_total` (by handler, method, status), `http_request_duration_seconds` (histogram).
-- Docker Compose and minikube both run a Prometheus that scrapes the API every 5 s. Useful queries:
+## More pods, same throughput
 
-```promql
-sum(rate(http_requests_total{handler="/search"}[1m]))                       # requests per second
-histogram_quantile(0.9, sum(rate(http_request_duration_seconds_bucket{handler="/search"}[5m])) by (le))  # p90 latency
-sum(rate(http_requests_total{status="5xx"}[5m]))                             # errors per second
-```
+<p align="center">
+  <img src="assets/k8s_scaling.png" alt="HPA scaled from 2 to 4 pods on one saturated node" width="100%">
+</p>
 
-## Measured latency
+Under load the autoscaler did its job: 2 → 4 pods, no restarts. Throughput still stayed at 0.3 req/s, with a median
+latency of 21.7 s and 4 errors out of 200 requests. All the pods shared one minikube node with 4 CPUs, already
+saturated, so new pods only split the same CPUs and requests waited in line.
 
-Measured with `scripts/load_test.py` (client-side latency, `top_k=10`, 50 candidates reranked).
-Hardware: **Apple M4 MacBook, 16 GB RAM, native Python 3.9 (CPU, no Docker)**.
+These Kubernetes numbers come from a Docker VM limited to 4 CPUs and 8 GB, so they can't be compared with the native
+ones above.
 
-| Setup | Requests | Concurrency | p50 | p90 | p99 | Throughput |
-| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Hybrid + rerank | 100 | 1 | 489 ms | 501 ms | 541 ms | 2.0 req/s |
-| Hybrid + rerank | 200 | 4 | 2248 ms | 2408 ms | 2568 ms | 1.8 req/s |
-| Hybrid only (`rerank=false`) | 200 | 1 | 13 ms | 17 ms | 23 ms | 71.8 req/s |
+---
 
-The cross-encoder dominates the cost (50 forward passes on long abstracts). With 4 parallel requests,
-throughput stays at ~2 req/s (latency grows ~4x): one process already uses all CPU cores, so requests wait in line.
-This is why the service scales **horizontally** (more pods, HPA).
+## Things that didn't pay off
 
-Startup (loading models + indices): 11.3 s on the same machine.
-**Docker and Kubernetes** (same Mac, but the Docker Desktop VM only gets **4 CPU / 8 GB**, and minikube runs inside
-it with 4 CPU / 6 GB, so these numbers are not comparable with the native ones above):
+- **The first MS MARCO benchmark**: 50 queries with unchecked labels.
+- **Hybrid fusion**: no gain in nDCG@10 over dense alone on SciFact.
+- **Autoscaling on a single node**: more pods, same throughput.
 
-| Setup | Requests | Concurrency | p50 | p90 | p99 | Throughput | Errors |
-| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Docker, 1 container | 100 | 1 | 2925 ms | 3073 ms | 3378 ms | – | 0 |
-| Docker compose, 1 container | 50 | 2 | 5872 ms | 6108 ms | 6405 ms | 0.3 req/s | 0 |
-| minikube, HPA 2 → 4 pods | 200 | 8 | 21699 ms | 42868 ms | 56819 ms | 0.3 req/s | 4 |
+## If you build one of these
 
-In minikube the HPA went from 2 to 4 pods (`cpu: 304%/70%`) and no pod restarted, but throughput stayed at 0.3 req/s:
-all pods share one 4-CPU node that is already saturated, so latency is mostly time spent waiting in line.
-Adding pods only helps when there is free CPU (on a real cluster: more nodes).
+- **Measure each stage on its own** before stacking models, including hybrid without the reranker.
+- **Check that the test set isn't too easy**, and that its labels are real.
+- **Put latency next to accuracy** for every stage, so the trade-off is visible.
+- **More pods only help when there is free CPU.** On a real cluster, that means more nodes.
 
-Image: 2.1 GB on disk (532 MB compressed). API pod memory: 416 to 568 Mi (`kubectl top pods`).
-Full commands in [RUNBOOK.md](RUNBOOK.md).
+## Next experiments
 
-No retrieval-quality metric (MRR, nDCG) is reported for now.
+- A cheaper cross-encoder: ONNX or OpenVINO INT8.
+- LLM listwise reranking over BM25 scores.
+- MS MARCO dev with its real relevance labels.
+- A multi-node cluster, to see autoscaling actually add throughput.
 
-## Limitations
+---
 
-Runs locally on minikube (no cloud), CPU only (no GPU), no authentication, basic monitoring
-(no alerting, no tracing). Details in [docs/MLOPS_GUIDE.md](docs/MLOPS_GUIDE.md#limitations).
+<sub>Quality: `results/quality_scifact.json` (`scripts/eval_quality.py`). Latency and Kubernetes numbers:
+`scripts/load_test.py`, commands in [RUNBOOK.md](RUNBOOK.md). Every file is explained in
+[docs/MLOPS_GUIDE.md](docs/MLOPS_GUIDE.md).</sub>
